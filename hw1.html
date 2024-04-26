@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>ThreeJS HW1NPM
+        </title>
+        <script src="./dat.gui.js"></script>
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "./node_modules/three/build/three.module.js",
+                    "three/addons/": "./node_modules/three/examples/jsm/"
+                }
+            }
+        </script>
+
+        <style>
+            body {
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="webgl-output"></div>
+        <script type="module">
+            import * as THREE from 'three';
+            //import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+            import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+            import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+            import { RectAreaLightHelper }  from 'three/addons/helpers/RectAreaLightHelper.js';
+
+            function main() {
+                const renderer = new THREE.WebGLRenderer();
+                renderer.setClearColor(new THREE.Color(0x000000));
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.shadowMap.enabled = true;
+
+                // default 값
+                const fov = 65;
+                const aspect = 2;  // the canvas default
+                const near = 0.1;
+                const far = 100;
+
+                // 카메라 변수 선언 및 위치 설정
+                const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+                camera.position.set(0, 10, 36);
+
+                class MinMaxGUIHelper {     // near 속성과 far 속성을 제어해줄 class
+                    constructor(obj, minProp, maxProp, minDif) {
+                        this.obj = obj;
+                        this.minProp = minProp;
+                        this.maxProp = maxProp;
+                        this.minDif = minDif;
+                    }
+                    get min() {
+                        return this.obj[this.minProp];
+                    }
+                    set min(v) {
+                        this.obj[this.minProp] = v;
+                        this.obj[this.maxProp] = Math.max(this.obj[this.maxProp], v + this.minDif);
+                    }
+                    get max() {
+                        return this.obj[this.maxProp];
+                    }
+                    set max(v) {
+                        this.obj[this.maxProp] = v;
+                        this.min = this.min;  // this will call the min setter
+                    }
+                }
+
+                function updateCamera() {       // 카메라 투영 매트릭스를 업데이트
+                    camera.updateProjectionMatrix();
+                }
+
+                // 카메라의 속성을 변경할 때마다 업데이트
+                const gui = new dat.GUI();
+                gui.add(camera, 'fov', 1, 180).onChange(updateCamera);
+                const minMaxGUIHelper = new MinMaxGUIHelper(camera, 'near', 'far', 0.1);
+                gui.add(minMaxGUIHelper, 'min', 0.1, 100, 0.1).name('near').onChange(updateCamera);
+                gui.add(minMaxGUIHelper, 'max', 0.1, 100, 0.1).name('far').onChange(updateCamera);
+
+                // orbit control
+                //const orbitControls = new OrbitControls(camera, renderer.domElement);
+                //orbitControls.target.set(0, 5, 0);
+
+                // trackball control
+                const controls = new TrackballControls(camera, renderer.domElement);
+                controls.rotateSpeed = 1.0;
+                controls.zoomSpeed = 1.2;
+                controls.panSpeed = 0.8;
+                controls.keys = ['KeyA', 'KeyS', 'KeyD'];
+                controls.target.set(0, 10, 0)
+
+
+                window.addEventListener('keydown', (event) => {
+                    if (event.key === 'z') {
+                        // Z 키를 눌렀을 때의 카메라 위치를 콘솔에 표시합니다.
+                        console.log('Camera Position:', camera.position.clone());
+                    }
+                });
+                
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color('white');    // 배경
+
+                // 바닥
+                {
+                    const planeSize = 40;
+
+                    const loader = new THREE.TextureLoader();
+                    const texture = loader.load("./src/ground_texture.png");
+                    texture.wrapS = THREE.RepeatWrapping;       // 랩핑 모드 -> texture를 무한으로 반복
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.magFilter = THREE.NearestFilter;        // 특정 텍스처 좌표와 가장 가까운 텍스쳐 요소의 값 리턴
+                    const repeats = planeSize / 10;
+                    texture.repeat.set(repeats, repeats);
+
+                    const planeGeo = new THREE.PlaneGeometry(planeSize, planeSize + 5);
+                    const planeMat = new THREE.MeshPhongMaterial({
+                    map: texture,
+                    side: THREE.DoubleSide,
+                    });
+                    const mesh = new THREE.Mesh(planeGeo, planeMat);
+                    mesh.rotation.x = Math.PI * -.5;
+                    mesh.receiveShadow = true;
+                    scene.add(mesh);
+                }
+                {   // xyz축 헬퍼
+                    const axesHelper = new THREE.AxesHelper(5);
+                    scene.add(axesHelper);
+                }
+
+
+                {   // 왼쪽벽
+                    const pgeometry = new THREE.PlaneGeometry(45, 30);
+                    const pmaterial = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+                    const plane = new THREE.Mesh(pgeometry, pmaterial);
+                    plane.rotation.y = 0.5 * Math.PI;
+                    plane.position.set(-20, 15, 0);
+                    plane.castShadow = true;
+                    plane.receiveShadow = true;
+                    scene.add(plane);
+                }
+                {   // 오른쪽벽
+                    const pgeometry = new THREE.PlaneGeometry(45, 30);
+                    const pmaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+                    const plane = new THREE.Mesh(pgeometry, pmaterial);
+                    plane.rotation.y = 1.5 * Math.PI;
+                    plane.position.set(20, 15, 0);
+                    plane.castShadow = true;
+                    plane.receiveShadow = true;
+                    scene.add(plane);
+                }
+                {   // 창가 벽
+                    const lgeometry = new THREE.PlaneGeometry(10, 30);
+                    const lmaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide,});
+                    const lplane = new THREE.Mesh(lgeometry, lmaterial);
+                    lplane.rotation.y = 2.0 * Math.PI;
+                    lplane.position.set(-15, 15, -22.5);
+                    lplane.castShadow = true;
+                    lplane.receiveShadow = true;
+                    scene.add(lplane);
+
+                    const rgeometry = new THREE.PlaneGeometry(10, 30);
+                    const rmaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide, });
+                    const rplane = new THREE.Mesh(rgeometry, rmaterial);
+                    rplane.rotation.y = 2.0 * Math.PI;
+                    rplane.position.set(15, 15, -22.5);
+                    rplane.castShadow = true;
+                    rplane.receiveShadow = true;
+                    scene.add(rplane);
+
+                    var obj_group = new THREE.Object3D()
+                    scene.add(obj_group)
+                }
+
+                { // 왼쪽 책상
+                    const loader = new GLTFLoader();
+                    loader.load(
+                    './src/computer_desk/scene.gltf',
+                    function ( lgltf ) {
+                        scene.add( lgltf.scene );
+                        lgltf.scene.position.set(-16, 8.8, -15)
+                        lgltf.scene.scale.set(3.1, 3, 3.1);
+                        lgltf.scene.rotation.y = Math.PI / 2;
+
+                        const model = lgltf.scene;
+
+                        // 그림자
+                        model.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                            }
+                        });
+                    }
+                );
+                    // 달모양 램프
+                    loader.load(
+                    './src/moon_lamp/scene.gltf',
+                    function ( gltf ) {
+                        scene.add( gltf.scene );
+                        gltf.scene.position.set(-16, 8.95, -18)
+                        gltf.scene.scale.set(10, 10, 10);
+
+                        // 그림자
+                        gltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                    }
+                    )
+
+                    // 책 더미
+                    loader.load(
+                    './src/book_stack/scene.gltf',
+                    function ( gltf ) {
+                        scene.add( gltf.scene );
+                        gltf.scene.position.set(-18, 15.35, -10.35);
+                        gltf.scene.scale.set(1.8, 1.8, 1.8);
+                        // 그림자
+                        gltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                    }
+                    )
+
+                    // 선반
+                    loader.load('./src/computer_desk/scene.gltf', function(gltf) {
+                    const shelfmat = gltf.scene.children[0].children[0].children[0].children[0].material;
+                    const ShelfGroup = new THREE.Group();
+                    // 세로
+                    const hcube1 = new THREE.Mesh(new THREE.BoxGeometry(4, 20, 0.3), shelfmat);
+                    hcube1.position.set(-18, 18.9, -7.7);
+                    ShelfGroup.add(hcube1);
+                    const hcube2 = new THREE.Mesh(new THREE.BoxGeometry(4, 20, 0.3), shelfmat);
+                    hcube2.position.set(-18, 18.9, -22.3);
+                    ShelfGroup.add(hcube2);
+                    const hcube3 = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 0.3), shelfmat);
+                    hcube3.position.set(-18, 26.5, 22.3);
+                    ShelfGroup.add(hcube3);
+                    const hcube4 = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 0.3), shelfmat);
+                    hcube4.position.set(-18, 26.5, 7.3);
+                    ShelfGroup.add(hcube4);
+                    const hcube5 = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 0.3), shelfmat);
+                    hcube5.position.set(-18, 26.5, -0.2);
+                    ShelfGroup.add(hcube5);
+                    const hcube6 = new THREE.Mesh(new THREE.BoxGeometry(4, 5, 0.3), shelfmat);
+                    hcube6.position.set(-18, 26.5, 14.8);
+                    ShelfGroup.add(hcube6);
+                    const hcube7 = new THREE.Mesh(new THREE.BoxGeometry(4, 10, 0.3), shelfmat);
+                    hcube7.position.set(-18, 24, -15);
+                    ShelfGroup.add(hcube7);
+                    const hcube8 = new THREE.Mesh(new THREE.BoxGeometry(4, 10, 0.3), shelfmat);
+                    hcube8.position.set(-18, 14, -13);
+                    ShelfGroup.add(hcube8);
+                    // 가로
+                    const wcube1 = new THREE.Mesh(new THREE.BoxGeometry(4, 44.9, 0.3), shelfmat);
+                    wcube1.position.set(-18, 29, 0);
+                    wcube1.rotation.x = Math.PI / 2;
+                    ShelfGroup.add(wcube1);
+                    const wcube2 = new THREE.Mesh(new THREE.BoxGeometry(4, 44.9, 0.3), shelfmat);
+                    wcube2.position.set(-18, 24, 0);
+                    wcube2.rotation.x = Math.PI / 2;
+                    ShelfGroup.add(wcube2);
+                    const wcube3 = new THREE.Mesh(new THREE.BoxGeometry(4, 14.9, 0.3), shelfmat);
+                    wcube3.position.set(-18, 19, -15);
+                    wcube3.rotation.x = Math.PI / 2;
+                    ShelfGroup.add(wcube3);
+                    const wcube4 = new THREE.Mesh(new THREE.BoxGeometry(4, 5.3, 0.3), shelfmat);
+                    wcube4.position.set(-18, 14, -10.35);
+                    wcube4.rotation.x = Math.PI / 2;
+                    ShelfGroup.add(wcube4);
+
+                    ShelfGroup.castShadow = true;
+                    ShelfGroup.receiveShadow = true;
+                    // 왼쪽 선반
+                    const LeftShelf = ShelfGroup;
+                    scene.add(LeftShelf);
+                    // 오른쪽 선반
+                    const RightShelfGroup = ShelfGroup.clone();
+                    RightShelfGroup.position.x = 36;
+                    scene.add(RightShelfGroup);
+                    });
+
+
+                    // 오른쪽 책상
+                    loader.load(
+                    './src/computer_desk/scene.gltf',
+                    function ( rgltf ) {
+                        scene.add( rgltf.scene );
+                        rgltf.scene.position.set(16, 8.8, -15)
+                        rgltf.scene.scale.set(3.1, 3, 3.1);
+                        rgltf.scene.rotation.y = 3 * Math.PI / 2;
+
+                        // 그림자
+                        rgltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                        }
+                    );
+                    // 랩탑
+                    loader.load(
+                    './src/laptop/scene.gltf',
+                    function ( gltf ) {
+                        scene.add( gltf.scene );
+                        gltf.scene.position.set(16, -3, -15)
+                        gltf.scene.scale.set(15, 15, 15);
+                        gltf.scene.rotation.y = Math.PI
+
+                        // 그림자
+                        gltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                    }
+                    )
+
+                }
+                {   // 왼쪽 의자
+                    const loader = new GLTFLoader();
+                    loader.load(
+                    './src/office_chair/scene.gltf',
+                    function ( lgltf ) {
+                        scene.add( lgltf.scene );
+                        lgltf.scene.position.set(-10, 0, -15)
+                        lgltf.scene.scale.set(0.09, 0.09, 0.09);
+                        lgltf.scene.rotation.y = 3 * Math.PI / 2;
+
+                        // 모델에 그림자 생성
+                        lgltf.scene.traverse(function (child) {
+                            if (child.isMesh) {
+                                child.castShadow = true;
+                                child.receiveShadow = true;
+                            }
+                        });
+
+                    }
+                );
+                    //오른쪽 의자
+                    loader.load(
+                        './src/office_chair/scene.gltf',
+                        function ( rgltf ) {
+                            scene.add( rgltf.scene );
+                            rgltf.scene.position.set(10, 0, -15)
+                            rgltf.scene.scale.set(0.09, 0.09, 0.09);
+                            rgltf.scene.rotation.y = Math.PI / 2;
+
+                            // 그림자
+                        rgltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                        }
+                    );
+                }
+                {   // 왼쪽 침대
+                    const loader = new GLTFLoader();
+                        loader.load(
+                        './src/bed/scene.gltf',
+                        function ( lgltf ) {
+                            scene.add( lgltf.scene );
+                            lgltf.scene.position.set(-11, -0.7, 17)
+                            lgltf.scene.scale.set(0.52, 0.5, 0.5);
+                            lgltf.scene.rotation.y = Math.PI / 2;
+
+                            // 그림자
+                        lgltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                        }
+                    );
+                        // 오른쪽 침대
+                        loader.load(
+                        './src/bed/scene.gltf',
+                        function ( rgltf ) {
+                            scene.add( rgltf.scene );
+                            rgltf.scene.position.set(16.5, -0.7, 17)
+                            rgltf.scene.scale.set(0.52, 0.5, 0.5);
+                            rgltf.scene.rotation.y = Math.PI / 2;
+
+                                // 그림자
+                        rgltf.scene.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                        });
+                            }
+                        );
+                }
+
+                {   // 베란다 문
+                        const loader = new GLTFLoader();
+                        loader.load(
+                        './src/sliding_door/scene.gltf',
+                        function ( gltf ) {
+                            scene.add( gltf.scene );
+                            gltf.scene.position.set(0, -0.2, -22.5)
+                            gltf.scene.scale.set(10.5, 13.6, 1);
+                        }
+                    );
+                }
+                   // 옷걸이 (curve)
+
+                    var curve = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(0, 0, 0),
+                        new THREE.Vector3(0.3, 0.7, 0),
+                        new THREE.Vector3(1, 1, 0),
+                        new THREE.Vector3(1.7, 0.7, 0),
+                        new THREE.Vector3(2, -1, 0),
+                        new THREE.Vector3(2, -2, 0),
+                        new THREE.Vector3(2, -3, 0),
+                        new THREE.Vector3(-5, -7, 0),
+                        new THREE.Vector3(9, -7, 0),
+                        new THREE.Vector3(2, -3, 0),
+                    ])
+                    
+                    const tubeGeometry = new THREE.TubeGeometry(curve, 1000, 0.1, 32, false);
+                    const tubeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc , metalness : 0.5});
+                    const hanger = new THREE.Mesh(tubeGeometry, tubeMaterial);
+                    hanger.position.set(-16.5, 24, 3);
+                    hanger.scale.set(0.5, 0.5, 0.5);
+                    hanger.castShadow = true;
+
+                    scene.add(hanger);
+                
+                
+                // 엠비언트 라이트
+                let ambientLight;
+                ambientLight = new THREE.AmbientLight(0xffffff, 1);
+                scene.add(ambientLight);
+                gui.add(ambientLight, 'intensity', 0, 1).name('Ambient Light Intensity');
+                
+                // 디렉션 라이트
+                const color = 0xFFFFFF;
+                const intensity = 1;
+                const directionalLight = new THREE.DirectionalLight(color, intensity);
+                directionalLight.position.set(-10, 12, 4);
+                directionalLight.castShadow = true;
+                scene.add(directionalLight);
+                gui.add(directionalLight, 'intensity', 0, 5).name('Directional Light Intensity');
+
+                directionalLight.shadow.camera.top = 30;
+                directionalLight.shadow.camera.right = 30;
+                directionalLight.shadow.camera.bottom = -30;
+                directionalLight.shadow.camera.left = -30;
+
+                // 헤미스피얼 라이트
+                const hemispherLight = new THREE.HemisphereLight( 0xffffbb, 0x080820, 1 );
+                scene.add( hemispherLight );
+                gui.add(hemispherLight, 'intensity', 0, 5).name('Hemisphere Light Intensity');
+
+                // 포인트 라이트
+                const pointLight = new THREE.PointLight( 0xF5DA81, 0, 500 );
+                pointLight.position.set(-16, 11.3, -18);
+                scene.add( pointLight );
+                gui.add(pointLight, 'intensity', 0, 500).name('Point Light Intensity');
+                (-16, 8.95, -18)
+
+                // 스포트 라이트
+                const spotLight = new THREE.SpotLight( 0xffffff );
+                spotLight.position.set( 0, 20, 0);
+
+                spotLight.castShadow = true;
+                spotLight.shadow.mapSize.width = 1024;
+                spotLight.shadow.mapSize.height = 1024;
+                spotLight.shadow.camera.near = 500;
+                spotLight.shadow.camera.far = 4000;
+                spotLight.shadow.camera.fov = 30;
+                spotLight.shadow.camera.near = 10;
+                spotLight.angle = 0.9;
+                spotLight.penumbra = 0.2;
+                gui.add(spotLight, 'intensity', 0, 500).name('Spot Light Intensity');
+                
+                scene.add( spotLight );
+
+                // 렉트 에리어 라이트
+                const lightWidth = 4.5;
+                const lightHeight = 2.8;
+                const rectLight = new THREE.RectAreaLight( 0x819FF7, 0,  lightWidth, lightHeight );
+                rectLight.position.set(16.5, 10.8, -17.92);
+                rectLight.lookAt( 0, 10.95, -18 );
+                scene.add( rectLight )
+
+                gui.add(rectLight, 'intensity', 0, 10).name('Rect Area Light Intensity');
+
+                const rectLightHelper = new RectAreaLightHelper( rectLight );
+                rectLight.add( rectLightHelper );
+
+                // 라이트 온오프 
+                var clickedMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+                
+                const clickedPointLight = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3), clickedMaterial);
+                clickedPointLight.position.set(-16, 10.95, -18);
+                scene.add(clickedPointLight);
+
+                const clickedRectAreaLight = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 5), clickedMaterial);
+                clickedRectAreaLight.position.set(16.5, 10.8, -17.92);
+                scene.add(clickedRectAreaLight);
+
+                document.addEventListener('mousedown', onDocumentMouseDown, false);
+
+                function onDocumentMouseDown(event) {
+                    event.preventDefault();
+
+                    var mouse = new THREE.Vector2();
+                    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+                    var raycaster = new THREE.Raycaster();
+                    raycaster.setFromCamera(mouse, camera);
+
+                    var intersectsPointLight = raycaster.intersectObject(clickedPointLight);
+                    var intersectsRectAreaLight = raycaster.intersectObject(clickedRectAreaLight);
+
+                    if (intersectsPointLight.length > 0) {
+                        pointLight.intensity = (pointLight.intensity === 0) ? 100 : 0;
+                    }
+
+                    if (intersectsRectAreaLight.length > 0) {
+                        rectLight.intensity = (rectLight.intensity === 0) ? 10 : 0;
+                    }
+                }
+
+                // 라이트 애니메이션
+                const lightMixer = new THREE.AnimationMixer(directionalLight);
+
+                const lightPositionKF = new THREE.VectorKeyframeTrack('.position', [0, 1, 2], [-10, 12, 4, 10, 12, 4, -10, 12, 4]);
+                const lightColorKF = new THREE.ColorKeyframeTrack('.color', [0, 1, 2], [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+
+                const lightClip = new THREE.AnimationClip('.lightclip', 3, [lightPositionKF, lightColorKF]);
+
+                const lightAction = lightMixer.clipAction(lightClip);
+                lightAction.setLoop(THREE.LoopRepeat);
+                lightAction.timeScale = 1;
+                lightAction.play();
+
+                // 객체 애니메이션
+                const objMixer = new THREE.AnimationMixer(hanger);
+
+                const yAxis = new THREE.Vector3( 0, 1, 0 );
+
+				const qInitial = new THREE.Quaternion().setFromAxisAngle( yAxis, 0 );
+				const qPositive = new THREE.Quaternion().setFromAxisAngle( yAxis, Math.PI/4 );
+                const qNegative = new THREE.Quaternion().setFromAxisAngle( yAxis, -Math.PI/4 );
+				const quaternionKF = new THREE.QuaternionKeyframeTrack( '.quaternion', [ 0, 1, 2, 3, 4 ],
+                            [ qInitial.x, qInitial.y, qInitial.z, qInitial.w,
+                            qPositive.x, qPositive.y, qPositive.z, qPositive.w,
+                            qInitial.x, qInitial.y, qInitial.z, qInitial.w,
+                            qNegative.x, qNegative.y, qNegative.z, qNegative.w,
+                            qInitial.x, qInitial.y, qInitial.z, qInitial.w,] );
+
+                const objClip = new THREE.AnimationClip('.objclip', 5, [quaternionKF]);
+
+                const objAction = objMixer.clipAction(objClip);
+                objAction.setLoop(THREE.LoopRepeat);
+                objAction.timeScale = 1;
+                objAction.play();
+                
+                // 카메라 애니메이션
+                let cameraMixer;
+                window.addEventListener('keydown', (event) => {
+                    if (event.key === 'c') {
+                        const currentPos = camera.position.clone();
+                        const targetPos = new THREE.Vector3(0, 20, -15);
+
+                        cameraMixer = new THREE.AnimationMixer(camera);
+
+                        const cameraPositionKF = new THREE.VectorKeyframeTrack('.position', [0, 4], [
+                            currentPos.x, currentPos.y, currentPos.z,
+                            targetPos.x, targetPos.y, targetPos.z,
+                        ]);
+
+                        const cameraClip = new THREE.AnimationClip('cameraAnimation', 5, [cameraPositionKF]);
+
+                        const cameraAction = cameraMixer.clipAction(cameraClip);
+                        cameraAction.setLoop(THREE.LoopOnce);
+                        cameraAction.play();
+
+                        cameraAction.clampWhenFinished = true;
+                        cameraAction.enabled = true;
+                        cameraAction.reset();
+                        cameraMixer.uncacheAction(cameraAction);
+                    }
+                });
+
+                // 창크기 조절
+                function resizeRendererToDisplaySize(renderer) {
+                    const canvas = renderer.domElement;
+                    const width = canvas.clientWidth;
+                    const height = canvas.clientHeight;
+                    controls.handleResize();
+                    const needResize = canvas.width !== width || canvas.height !== height;
+                    if (needResize) {
+                    renderer.setSize(width, height, false);
+                    }
+                    return needResize;
+                }
+
+                const clock = new THREE.Clock();
+
+                document.getElementById("webgl-output").appendChild(renderer.domElement);
+                render();
+
+                function render() {
+                    const delta = clock.getDelta();
+
+                    if (lightMixer){
+                        lightMixer.update(delta);
+                    }
+                    if (objMixer){
+                        objMixer.update(delta);
+                    }
+                    if (cameraMixer){
+                        cameraMixer.update(delta);
+                    }          
+
+                    controls.update();
+
+                    if (resizeRendererToDisplaySize(renderer)) {
+                        camera.updateProjectionMatrix();
+                    }
+                    renderer.render(scene, camera);
+                    requestAnimationFrame(render);
+                }
+                requestAnimationFrame(render);
+            }
+
+            main();
+</script>
+</body>
+</html>
+
